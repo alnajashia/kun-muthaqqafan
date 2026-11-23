@@ -103,3 +103,20 @@ class AiService {
     return content.trim();
   }
 }
+
+/// Known OpenAI-compatible providers the user can pick with one tap.
+/// The user still supplies their own API key — no keys ship with the app.
+class AiPreset {
+  final String name;
+  final String baseUrl;
+  final String defaultModel;
+  const AiPreset(this.name, this.baseUrl, this.defaultModel);
+}
+
+const aiPresets = <AiPreset>[
+  AiPreset('DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-chat'),
+  AiPreset('OpenRouter', 'https://openrouter.ai/api/v1', 'deepseek/deepseek-chat'),
+  AiPreset('Groq', 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'),
+  AiPreset('Google Gemini', 'https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-2.0-flash'),
+  AiPreset('OpenAI', 'https://api.openai.com/v1', 'gpt-4o-mini'),
+];

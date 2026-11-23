@@ -22,7 +22,12 @@ class AppDatabase {
     final path = p.join(dir.path, 'kun_muthaqqafan.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldV, newV) async {
+        if (oldV < 2) {
+          await db.execute('ALTER TABLE highlights ADD COLUMN rect TEXT');
+        }
+      },
       onCreate: (db, v) async {
         await db.execute('''
 CREATE TABLE books(
@@ -52,7 +57,7 @@ CREATE TABLE notes(
 CREATE TABLE highlights(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   book_id INTEGER, doc_id INTEGER, text TEXT NOT NULL, color TEXT NOT NULL DEFAULT 'yellow',
-  page INTEGER, chapter TEXT, note TEXT, tags TEXT, created_at TEXT NOT NULL)''');
+  page INTEGER, chapter TEXT, note TEXT, tags TEXT, rect TEXT, created_at TEXT NOT NULL)''');
         await db.execute('''
 CREATE TABLE bookmarks(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,5 +318,33 @@ CREATE TABLE summaries(
       'sessionSec': sessionSec,
       'topAuthors': topAuthors,
     };
+  }
+
+  Future<int> addHighlightRect({
+    required int docId,
+    required int page,
+    required String color,
+    required String rectJson,
+  }) async {
+    final database = await db;
+    return database.insert('highlights', {
+      'doc_id': docId,
+      'text': '',
+      'color': color,
+      'page': page,
+      'rect': rectJson,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, Object?>>> highlightsForDoc(int docId) async {
+    final database = await db;
+    return database.query('highlights',
+        where: 'doc_id = ?', whereArgs: [docId], orderBy: 'page ASC, id ASC');
+  }
+
+  Future<void> deleteHighlight(int id) async {
+    final database = await db;
+    await database.delete('highlights', where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/db/app_database.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../core/services/ai_service.dart';
+import '../../core/services/offline_summarizer.dart';
 
 /// AI summaries: honest provider configuration (user-supplied endpoint,
 /// key, model), style picker, generation grounded in pasted/selected
@@ -51,6 +52,18 @@ class _AiScreenState extends State<AiScreen> {
         title: Text(s.isAr ? 'إعداد مزود الذكاء' : 'AI provider settings'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<AiPreset>(
+              decoration: InputDecoration(
+                  labelText: s.isAr ? 'اختر مزوداً جاهزاً' : 'Pick a ready provider'),
+              items: aiPresets
+                  .map((p) => DropdownMenuItem(value: p, child: Text(p.name)))
+                  .toList(),
+              onChanged: (p) {
+                if (p == null) return;
+                baseCtrl.text = p.baseUrl;
+                modelCtrl.text = p.defaultModel;
+              },
+            ),
             TextField(
                 controller: baseCtrl,
                 decoration: const InputDecoration(
@@ -114,6 +127,39 @@ class _AiScreenState extends State<AiScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+
+  Future<void> _generateOffline() async {
+    final text = _textCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _result = null;
+    });
+    final out = _style == 'key_ideas'
+        ? OfflineSummarizer.keySentences(text).map((e) => '• $e').join('\n')
+        : OfflineSummarizer.summarize(text,
+            maxSentences: _style == 'quick' ? 4 : 10);
+    if (out.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = widget.s.isAr
+              ? 'النص قصير جداً للتلخيص دون اتصال.'
+              : 'Text is too short for offline summarization.';
+        });
+      }
+      return;
+    }
+    await AppDatabase.instance.saveSummary('offline_$_style', out);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _result = out;
+    });
+    _load();
   }
 
   @override
@@ -180,6 +226,23 @@ class _AiScreenState extends State<AiScreen> {
           label: Text(s.isAr ? 'أنشئ الملخص' : 'Generate summary'),
           onPressed: (_busy || !configured) ? null : _generate,
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.offline_bolt_outlined),
+          label: Text(s.isAr
+              ? 'تلخيص فوري دون إنترنت (مدمج)'
+              : 'Instant offline summary (built-in)'),
+          onPressed: _busy ? null : _generateOffline,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            s.isAr
+                ? 'التلخيص المدمج يعمل على جهازك دون مفتاح: يستخرج أهم جمل النص الأصلي كما هي دون اختراع محتوى.'
+                : 'The built-in summarizer runs on your device with no key: it extracts the most important original sentences without inventing content.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
         if (_error != null) ...[
           const SizedBox(height: 12),
           Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -198,7 +261,7 @@ class _AiScreenState extends State<AiScreen> {
         ..._saved.map((r) => Card(
               child: ListTile(
                 leading: const Icon(Icons.auto_awesome),
-                title: Text(AiService.styles[r['style']] ?? '${r['style']}'),
+                title: Text(AiService.styles[(r['style'] as String).replaceFirst('offline_', '')] ?? '${r['style']}'),
                 subtitle: Text(
                   r['content'] as String,
                   maxLines: 2,
