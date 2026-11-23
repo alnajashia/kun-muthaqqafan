@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../ai/ai_screen.dart';
+import '../backup/backup_screen.dart';
+import '../notes/notes_screen.dart';
+import '../review/review_screen.dart';
+import '../stats/stats_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   final AppStrings s;
@@ -89,6 +94,41 @@ class ProfileScreen extends StatelessWidget {
         ),
         Text('$dailyGoal ${s.isAr ? 'دقيقة يومياً' : 'minutes daily'}'),
         const SizedBox(height: 24),
+        ListTile(
+          leading: const Icon(Icons.bar_chart),
+          title: Text(s.isAr ? 'إحصائياتي' : 'My statistics'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => StatsScreen(s: s))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.note_alt_outlined),
+          title: Text(s.isAr ? 'ملاحظاتي' : 'My notes'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => NotesScreen(s: s))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.psychology_outlined),
+          title: Text(s.isAr ? 'مراجعة اليوم' : 'Daily review'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => ReviewScreen(s: s))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.backup_outlined),
+          title: Text(s.isAr ? 'النسخ الاحتياطي والتصدير' : 'Backup & export'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => BackupScreen(s: s))),
+        ),
+        ListTile(
+          leading: const Icon(Icons.auto_awesome_outlined),
+          title: Text(s.isAr ? 'ملخصات الذكاء' : 'AI summaries'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => AiScreen(s: s))),
+        ),
         ListTile(
           leading: const Icon(Icons.info_outline),
           title: Text(s.about),

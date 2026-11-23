@@ -149,6 +149,18 @@ CREATE TABLE summaries(
         whereArgs: [id],
       );
 
+  Future<void> updateDocPage(int id, int page, int totalPages) async =>
+      (await db).update(
+        'local_docs',
+        {
+          'last_page': page,
+          'progress': totalPages > 0 ? (page / totalPages).clamp(0, 1) : 0,
+          'last_opened': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
   Future<int> addBookmark(int docId, int page, String? label) async =>
       (await db).insert('bookmarks', {
         'doc_id': docId,
@@ -163,4 +175,143 @@ CREATE TABLE summaries(
 
   Future<void> deleteBookmark(int id) async =>
       (await db).delete('bookmarks', where: 'id = ?', whereArgs: [id]);
+
+  // ---- Notes ----
+  Future<int> addNote(Map<String, Object?> note) async =>
+      (await db).insert('notes', note);
+
+  Future<List<Map<String, Object?>>> notes({String query = ''}) async {
+    final d = await db;
+    if (query.trim().isEmpty) {
+      return d.query('notes', orderBy: 'created_at DESC');
+    }
+    return d.query('notes',
+        where: 'title LIKE ? OR content LIKE ?',
+        whereArgs: ['%$query%', '%$query%'],
+        orderBy: 'created_at DESC');
+  }
+
+  Future<void> deleteNote(int id) async =>
+      (await db).delete('notes', where: 'id = ?', whereArgs: [id]);
+
+  // ---- Review cards (SM-2) ----
+  Future<int> addCard(String front, String back) async =>
+      (await db).insert('review_cards', {
+        'front': front,
+        'back': back,
+        'due_date': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+  Future<List<Map<String, Object?>>> dueCards() async => (await db).query(
+        'review_cards',
+        where: 'due_date <= ?',
+        whereArgs: [DateTime.now().toIso8601String()],
+        orderBy: 'due_date ASC',
+      );
+
+  Future<int> cardCount() async {
+    final r = await (await db).rawQuery('SELECT COUNT(*) AS c FROM review_cards');
+    return (r.first['c'] as int?) ?? 0;
+  }
+
+  /// Simplified SM-2 grading. quality: 0 = again, 3 = hard, 4 = good, 5 = easy.
+  Future<void> gradeCard(Map<String, Object?> card, int quality) async {
+    var ease = (card['ease'] as num).toDouble();
+    var interval = card['interval_days'] as int;
+    var reps = card['repetitions'] as int;
+    if (quality < 3) {
+      reps = 0;
+      interval = 1;
+    } else {
+      reps += 1;
+      interval = reps == 1
+          ? 1
+          : reps == 2
+              ? 6
+              : (interval * ease).round().clamp(1, 365);
+    }
+    ease = (ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
+        .clamp(1.3, 2.8);
+    final due = DateTime.now().add(Duration(days: interval));
+    await (await db).update(
+      'review_cards',
+      {
+        'ease': ease,
+        'interval_days': interval,
+        'repetitions': reps,
+        'due_date': due.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [card['id']],
+    );
+  }
+
+  Future<void> deleteCard(int id) async =>
+      (await db).delete('review_cards', where: 'id = ?', whereArgs: [id]);
+
+  // ---- Summaries ----
+  Future<int> saveSummary(String style, String content) async {
+    final now = DateTime.now().toIso8601String();
+    return (await db).insert('summaries', {
+      'style': style,
+      'content': content,
+      'created_at': now,
+      'modified_at': now,
+    });
+  }
+
+  Future<List<Map<String, Object?>>> summaries() async =>
+      (await db).query('summaries', orderBy: 'created_at DESC');
+
+  Future<void> deleteSummary(int id) async =>
+      (await db).delete('summaries', where: 'id = ?', whereArgs: [id]);
+
+  // ---- Statistics (real user data only) ----
+  Future<Map<String, Object?>> stats() async {
+    final d = await db;
+    Future<int> count(String sql, [List<Object?> args = const []]) async {
+      final r = await d.rawQuery(sql, args);
+      return (r.first.values.first as int?) ?? 0;
+    }
+
+    final totalBooks = await count('SELECT COUNT(*) FROM books');
+    final finished =
+        await count("SELECT COUNT(*) FROM books WHERE status = 'finished'");
+    final reading =
+        await count("SELECT COUNT(*) FROM books WHERE status = 'reading'");
+    final want =
+        await count("SELECT COUNT(*) FROM books WHERE status = 'want'");
+    final docs = await count('SELECT COUNT(*) FROM local_docs');
+    final notesCount = await count('SELECT COUNT(*) FROM notes');
+    final ratingRow = await d.rawQuery(
+        'SELECT AVG(rating) AS a FROM books WHERE rating IS NOT NULL AND rating > 0');
+    final avgRating = (ratingRow.first['a'] as num?)?.toDouble() ?? 0;
+    final pagesRow =
+        await d.rawQuery('SELECT COALESCE(SUM(pages),0) AS p FROM books');
+    final totalPages = (pagesRow.first['p'] as num?)?.toInt() ?? 0;
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
+    final finishedThisMonth = await count(
+        "SELECT COUNT(*) FROM books WHERE status = 'finished' AND finish_date >= ?",
+        [monthStart]);
+    final sessionsRow = await d.rawQuery(
+        'SELECT COALESCE(SUM(minutes),0) AS s FROM sessions');
+    final sessionSec = ((sessionsRow.first['s'] as num?)?.toInt() ?? 0) * 60;
+    final topAuthors = await d.rawQuery(
+        'SELECT author, COUNT(*) AS c FROM books WHERE author IS NOT NULL AND author != \'\' GROUP BY author ORDER BY c DESC LIMIT 5');
+    return {
+      'totalBooks': totalBooks,
+      'finished': finished,
+      'reading': reading,
+      'want': want,
+      'docs': docs,
+      'notes': notesCount,
+      'avgRating': avgRating,
+      'totalPages': totalPages,
+      'finishedThisMonth': finishedThisMonth,
+      'sessionSec': sessionSec,
+      'topAuthors': topAuthors,
+    };
+  }
 }

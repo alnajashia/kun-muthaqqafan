@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import '../../core/db/app_database.dart';
 import '../../core/l10n/app_strings.dart';
 import '../../models/book.dart';
+import 'epub_reader_screen.dart';
+import 'pdf_reader_screen.dart';
 import 'txt_reader_screen.dart';
 
 class ReadScreen extends StatefulWidget {
@@ -135,12 +137,16 @@ class _ReadScreenState extends State<ReadScreen> {
                         },
                       ),
                       onTap: () {
-                        if (d.format == 'txt') {
+                        final Widget? screen = switch (d.format) {
+                          'txt' => TxtReaderScreen(s: s, doc: d),
+                          'pdf' => PdfReaderScreen(s: s, doc: d),
+                          'epub' => EpubReaderScreen(s: s, doc: d),
+                          _ => null,
+                        };
+                        if (screen != null) {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    TxtReaderScreen(s: s, doc: d)),
+                            MaterialPageRoute(builder: (_) => screen),
                           ).then((_) {
                             if (mounted) setState(_reload);
                           });
@@ -148,8 +154,8 @@ class _ReadScreenState extends State<ReadScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                                 content: Text(s.isAr
-                                    ? 'قارئ ${d.format.toUpperCase()} يأتي في الدفعة التالية — الملف محفوظ في مكتبتك الآن.'
-                                    : '${d.format.toUpperCase()} reader lands in the next batch — your file is saved in your library.')),
+                                    ? 'صيغة غير مدعومة بعد — الملف محفوظ في مكتبتك.'
+                                    : 'Format not supported yet — your file is saved in your library.')),
                           );
                         }
                       },
